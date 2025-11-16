@@ -1,0 +1,60 @@
+name: Anti-Spam Cleaner
+
+on:
+  discussion_comment:
+    types: [created]
+
+jobs:
+  remove_spam:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check for spam patterns
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const comment = context.payload.comment.body.toLowerCase();
+
+            // Block ANY links
+            const linkPatterns = [
+              "http://",
+              "https://",
+              "www."
+            ];
+
+            // Block spam words (add more if needed)
+            const spamWords = [
+              "casino",
+              "porn",
+              "xxx",
+              "sex",
+              "telegram",
+              "whatsapp",
+              "crypto",
+              "invest",
+              "bonus",
+              "discount",
+              "promo",
+              "click here",
+              "offer",
+              "make money",
+            ];
+
+            function contains(list) {
+              return list.some(word => comment.includes(word));
+            }
+
+            if (contains(linkPatterns) || contains(spamWords)) {
+              console.log("Spam detected. Deleting comment...");
+
+              // Delete the comment
+              await github.rest.discussions.deleteDiscussionComment({
+                discussion_id: context.payload.discussion.id,
+                comment_id: context.payload.comment.id,
+                repository_id: context.payload.repository.id,
+              });
+
+              console.log("Comment deleted.");
+            } else {
+              console.log("Comment is clean.");
+            }
