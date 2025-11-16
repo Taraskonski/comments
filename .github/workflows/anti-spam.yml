@@ -4,103 +4,92 @@ on:
   discussion_comment:
     types: [created]
 
+permissions:
+  discussions: write
+  issues: write
+  administration: write
+
 jobs:
   clean_spam:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Detect and remove spam
+      - name: Run anti-spam logic
         uses: actions/github-script@v6
         with:
           script: |
-            const comment = context.payload.comment.body.toLowerCase();
+            const body = context.payload.comment.body.toLowerCase();
             const user = context.payload.comment.user.login;
+            const discussionNumber = context.payload.discussion.number;
+            const commentId = context.payload.comment.id;
 
-            console.log("Checking comment from:", user);
-            console.log("Comment:", comment);
+            console.log("New comment from:", user);
+            console.log("Comment:", body);
 
-            //==============================
-            // 1. STRONG REGEX SPAM FILTERS
-            //==============================
-            const spamRegex = [
-              /https?:\/\//gi,          // all links
-              /www\./gi,
-              /casino/gi,
-              /porn|xxx|sex/gi,
-              /telegram|whatsapp/gi,
-              /crypto|invest/gi,
-              /discount|promo|bonus/gi,
-              /click\s*here/gi,
-              /make\s*money/gi,
-              /join\s*now/gi,
-              /free\s*gift/gi,
-              /\b(?:loan|broker|forex)\b/gi,
-              /\boffer\b/gi,
-              /%\d{1,2}/gi,            // weird % spam
-              /[\u0400-\u04FF]{5,}/gi  // Cyrillic spam blocks from bots
+            // 1️⃣ STRONG REGEX FILTERS
+            const spamPatterns = [
+              /https?:\/\//i,
+              /www\./i,
+              /casino/i,
+              /porn|xxx|sex/i,
+              /crypto|invest/i,
+              /telegram|whatsapp/i,
+              /bonus|promo|discount/i,
+              /click\s*here/i,
+              /free\s*money/i,
+              /make\s*money/i,
+              /\boffer\b/i,
+              /\bloan\b/i
             ];
 
-            let isSpam = false;
-            for (const regex of spamRegex) {
-              if (regex.test(comment)) {
-                isSpam = true;
-                break;
-              }
-            }
+            let isSpam = spamPatterns.some((regex) => regex.test(body));
 
             if (!isSpam) {
-              console.log("Comment is clean. ✓");
+              console.log("Comment is clean.");
               return;
             }
 
-            console.log("SPAM DETECTED — Proceeding to delete.");
+            console.log("🚨 Spam detected, deleting comment…");
 
-            //=====================================================
-            // DELETE COMMENT
-            //=====================================================
-            await github.rest.discussions.deleteDiscussionComment({
-              discussion_number: context.payload.discussion.number,
-              comment_number: context.payload.comment.number,
+            // 2️⃣ DELETE COMMENT (correct API)
+            await github.rest.discussions.deleteComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
+              comment_id: commentId
             });
 
-            console.log("Comment DELETED.");
+            console.log("✔ Comment deleted.");
 
-            //=====================================================
-            // 2. AUTO-BLOCK THE USER
-            //=====================================================
+            // 3️⃣ BLOCK USER
             console.log("Blocking user:", user);
 
-            await github.rest.users.block({
-              username: user
-            }).catch(err => {
-              console.log("Could not block user (permissions?):", err);
-            });
+            try {
+              await github.rest.users.block({
+                username: user
+              });
+              console.log("✔ User blocked.");
+            } catch (e) {
+              console.log("Failed to block user:", e.message);
+            }
 
-            //=====================================================
-            // 3. SEND NOTIFICATION (creates GitHub Issue)
-            //=====================================================
-            console.log("Sending notification issue...");
-
+            // 4️⃣ NOTIFY VIA GITHUB ISSUE
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🛑 Spam detected and removed from @${user}`,
+              title: `🛑 Spam removed from @${user}`,
               body: `
-**Spam comment detected and deleted automatically.**
+A spam comment was automatically detected and removed.
 
 **User:** @${user}  
 **Action taken:**  
 - Comment deleted  
 - User blocked  
-- Regex match triggered
 
-**Comment content:**  
+**Content:**  
 > ${context.payload.comment.body}
 
 _Time: ${new Date().toISOString()}_
-              `,
+              `
             });
 
-            console.log("Notification issue created.");
+            console.log("✔ Notification issue created.");
