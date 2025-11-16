@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Run anti-spam logic
+      - name: Run advanced anti-spam logic
         uses: actions/github-script@v6
         with:
           script: |
@@ -26,7 +26,18 @@ jobs:
             console.log("New comment from:", user);
             console.log("Comment:", body);
 
-            // 1️⃣ STRONG REGEX FILTERS
+            // 1️⃣ ALLOWLIST — trusted users
+            const allowlist = [
+              "Taraskonski",
+              "BorovetsDreamTeam"
+            ];
+
+            if (allowlist.includes(user)) {
+              console.log("User is allowlisted → skipping spam check.");
+              return;
+            }
+
+            // 2️⃣ STRONG REGEX SPAM FILTERS
             const spamPatterns = [
               /https?:\/\//i,
               /www\./i,
@@ -39,7 +50,8 @@ jobs:
               /free\s*money/i,
               /make\s*money/i,
               /\boffer\b/i,
-              /\bloan\b/i
+              /\bloan\b/i,
+              /%\d{1,2}/i
             ];
 
             let isSpam = spamPatterns.some((regex) => regex.test(body));
@@ -49,9 +61,9 @@ jobs:
               return;
             }
 
-            console.log("🚨 Spam detected, deleting comment…");
+            console.log("🚨 SPAM DETECTED — Deleting comment…");
 
-            // 2️⃣ DELETE COMMENT (correct API)
+            // 3️⃣ DELETE COMMENT
             await github.rest.discussions.deleteComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -60,7 +72,7 @@ jobs:
 
             console.log("✔ Comment deleted.");
 
-            // 3️⃣ BLOCK USER
+            // 4️⃣ BLOCK USER
             console.log("Blocking user:", user);
 
             try {
@@ -69,26 +81,32 @@ jobs:
               });
               console.log("✔ User blocked.");
             } catch (e) {
-              console.log("Failed to block user:", e.message);
+              console.log("❗ Could not block user:", e.message);
             }
 
-            // 4️⃣ NOTIFY VIA GITHUB ISSUE
+            // 5️⃣ SEND NOTIFICATION ISSUE
+            console.log("Creating notification issue…");
+
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `🛑 Spam removed from @${user}`,
               body: `
-A spam comment was automatically detected and removed.
+🚨 **Automatic Anti-Spam Alert**
+
+A spam comment was detected and automatically removed.
 
 **User:** @${user}  
-**Action taken:**  
+**Actions taken:**  
 - Comment deleted  
 - User blocked  
 
-**Content:**  
+**Comment content:**  
 > ${context.payload.comment.body}
 
 _Time: ${new Date().toISOString()}_
+
+*(This issue was generated automatically by the Anti-Spam Bot.)*
               `
             });
 
