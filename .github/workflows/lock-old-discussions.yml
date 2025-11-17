@@ -1,0 +1,25 @@
+name: Auto-lock old discussions
+
+on:
+  schedule:
+    # Проверява веднъж на ден (можеш да смениш ако искаш)
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  discussions: write
+
+jobs:
+  lock_old_discussions:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Lock stale discussions
+        uses: dessant/lock-threads@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          process-only: discussions
+          discussion-inactive-days: 90
+          lock-reason: "resolved"
+          discussion-comment: >
+            This discussion has been automatically locked due to 90 days of inactivity.
