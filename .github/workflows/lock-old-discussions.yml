@@ -22,4 +22,4 @@ jobs:
           discussion-inactive-days: 90
           lock-reason: "resolved"
           discussion-comment: >
-            This discussion has been automatically locked due to 90 days of inactivity.
+            This discussion has been automatically locked due to a 90 day expiration.
